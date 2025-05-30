@@ -1,0 +1,22 @@
+# Python & OS
+__pycache__/
+*.py[cod]
+*.so
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+
+# Temporary & build
+temps/
+*.pdf
+*.csv
+overlay_*.jpg
+temp_*.jpg
+
+# Model files
+*.pt
+*.pth
+
+# Virtual environments
+.env
+.venv
