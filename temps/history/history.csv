@@ -1,0 +1,1 @@
+timestamp,file_name,file_hash,data_type,segmentation_threshold,classification_threshold,video_frame_interval,cloud_coverage_percent,sky_oktas,sky_condition,dominant_cloud_type,top_predictions_str,original_path,mask_path,overlay_path,roi_path,preview_path,duration_seconds
