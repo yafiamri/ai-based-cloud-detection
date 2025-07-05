@@ -140,7 +140,7 @@ def export_pdf(data, nama_pengguna="Pengguna", output_path=None):
     # PERBAIKAN: Menyimpan ke file dan mengembalikan PATH, bukan bytes
     if output_path is None:
         os.makedirs("temps", exist_ok=True)
-        output_path = f"temps/report_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+        output_path = f"temps/report_{(datetime.now()+timedelta(hours=7)).strftime('%Y%m%d%H%M%S')}.pdf"
     
     pdf.output(output_path)
     return output_path
@@ -150,7 +150,7 @@ def export_zip(data, output_path=None):
     # PERBAIKAN: Menyimpan ke file dan mengembalikan PATH, bukan bytes
     if output_path is None:
         os.makedirs("temps", exist_ok=True)
-        output_path = f"temps/export_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
+        output_path = f"temps/export_{(datetime.now()+timedelta(hours=7)).strftime('%Y%m%d%H%M%S')}.zip"
         
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
         for item in data:
