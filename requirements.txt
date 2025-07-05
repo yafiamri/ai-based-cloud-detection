@@ -1,0 +1,13 @@
+streamlit
+streamlit-drawable-canvas==0.8.0
+protobuf
+torch
+ultralytics
+opencv-python
+Pillow
+plotly
+numpy
+pandas
+fpdf
+timm
+gdown
