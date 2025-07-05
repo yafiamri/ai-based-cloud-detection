@@ -4,7 +4,7 @@ import pandas as pd
 import zipfile
 from io import BytesIO
 from fpdf import FPDF
-from datetime import datetime
+from datetime import datetime, timedelta
 from PIL import Image
 import subprocess
 import shutil
@@ -66,7 +66,7 @@ def export_pdf(data, nama_pengguna="Pengguna", output_path=None):
     pdf.set_y(160); pdf.set_font("helvetica", 'B', 22); pdf.set_text_color(*primary_color)
     pdf.cell(0, 12, "Laporan Hasil Deteksi Awan Berbasis AI", ln=1, align='C')
     pdf.ln(5); pdf.set_text_color(*secondary_color)
-    for label, value in [("Disusun oleh: ", nama_pengguna), ("Dicetak pada: ", datetime.now().strftime('%Y-%m-%d %H:%M WIB'))]:
+    for label, value in [("Disusun oleh: ", nama_pengguna), ("Dicetak pada: ", (datetime.now()+timedelta(hours=7)).strftime('%Y-%m-%d %H:%M WIB'))]:
         pdf.set_font("helvetica", 'B', 14); label_w = pdf.get_string_width(label)
         pdf.set_x((pdf.w - pdf.get_string_width(label + value)) / 2); pdf.cell(label_w, 8, label, ln=0)
         pdf.set_font("helvetica", '', 14); pdf.cell(0, 8, value, ln=1)
