@@ -208,7 +208,7 @@ if st.button("Proses Semua Berkas", type="primary", use_container_width=True, di
                 kondisi = ["Cerah", "Sebagian Cerah", "Sebagian Berawan", "Berawan", "Hampir Tertutup", "Tertutup"][min(oktaf // 2, 5)]
                 
                 os.makedirs("temps/history/images", exist_ok=True); os.makedirs("temps/history/masks", exist_ok=True); os.makedirs("temps/history/overlays", exist_ok=True)
-                timestamp, base_name = (datetime.now() + timedelta(hours=7)).strftime("%Y%m%d_%H%M%S_WIB"), os.path.splitext(name)[0].replace(" ", "_")
+                timestamp, base_name = (datetime.now() + timedelta(hours=7)).strftime("%Y%m%d_%H%M%S"+ " WIB"), os.path.splitext(name)[0].replace(" ", "_")
                 img_path = f"temps/history/images/{timestamp}_{base_name}.png"
                 mask_path = f"temps/history/masks/{timestamp}_{base_name}.png"
                 overlay_path = f"temps/history/overlays/{timestamp}_{base_name}.png"
