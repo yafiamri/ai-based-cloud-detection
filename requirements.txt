@@ -1,13 +1,28 @@
+# --- Framework Utama & UI ---
 streamlit
 streamlit-drawable-canvas==0.8.0
-protobuf
+
+# --- Kecerdasan Buatan & Visi Komputer ---
 torch
+torchvision
 ultralytics
-opencv-python
+opencv-python-headless
 Pillow
-plotly
 numpy
-pandas
-fpdf
 timm
+
+# --- Penanganan Data & Konfigurasi ---
+pandas
+PyYAML
+
+# --- Pengunduhan Media & Jaringan ---
+google-api-python-client
+requests
+yt-dlp
+streamlink
 gdown
+
+# --- Pembuatan Laporan & Visualisasi ---
+plotly
+fpdf
+kaleido

@@ -1,0 +1,31 @@
+# PENTING: Abaikan folder secrets Streamlit
+.streamlit/secrets.toml
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Direktori yang dihasilkan oleh aplikasi (Data, Temp)
+# Tanda '/' di awal berarti hanya folder di root yang diabaikan
+/data/
+/temp/
+
+# File spesifik sistem operasi
+.DS_Store
+Thumbs.db
+
+# File spesifik IDE & Tools
+.idea/
+.vscode/
+.ipynb_checkpoints/
+
+# File log
+*.log
+*.log.*

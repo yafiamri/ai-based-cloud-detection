@@ -1,0 +1,89 @@
+# ======================================================
+# PUSAT KONFIGURASI UNTUK APLIKASI DETEKSI AWAN (ABCD)
+# ======================================================
+
+# --- Konfigurasi Aplikasi & Laporan ---
+app:
+  title: "AI-Based Cloud Detection"
+  author: "Yafi Amri"
+  affiliation: "Meteorologi ITB"
+  
+pdf_report:
+  # Warna untuk PDF sekarang akan mengambil dari ui.theme untuk konsistensi
+  cover_title: "Laporan Hasil Analisis Deteksi Awan Berbasis AI"
+  footer_text: "© AI-Based Cloud Detection" # Teks ini bisa tetap spesifik untuk PDF
+
+# --- Konfigurasi Tampilan & UI ---
+ui:
+  theme:
+    # Warna-warna ini digunakan untuk CSS global di layout.py
+    primary_color: "#1f77b4"
+    secondary_color: "#2ca02c"
+    card_bg_light: "#f8f9fa"
+    card_border_light: "#dee2e6"
+    primary_color_dark: "#6fa8dc"
+    secondary_color_dark: "#93c47d"
+    card_bg_dark: "#161b22"
+    card_border_dark: "#30363d"
+
+# --- Konfigurasi Path & Direktori ---
+paths:
+  # Direktori utama
+  assets: "assets"
+  database_file: "data/history.db"
+  
+  # Aset spesifik
+  demo: "assets/demo"
+  logo: "assets/logo.png"
+  placeholder: "assets/placeholder.png"
+  background: "assets/background.png"
+  
+  # Direktori untuk file yang dihasilkan
+  archive_dir: "data/archive"
+  original_archive: "data/archive/original"
+  mask_archive: "data/archive/masks"
+  overlay_archive: "data/archive/overlays"
+  
+  # Direktori sementara
+  temp_dir: "temp"
+  download_dir: "temp/downloads"
+  report_dir: "temp/reports"
+
+# --- Konfigurasi Model & Analisis ---
+models:
+  classification:
+    weight_path: "models/yolov8.pt"
+    drive_id: "1qG1nvsCBPxOPtiE2Po8yDS521SjfZisI"
+    class_names:
+      - 'Cumulus'
+      - 'Altocumulus / Cirrocumulus'
+      - 'Cirrus / Cirrostratus'
+      - 'Clear Sky'
+      - 'Stratocumulus / Stratus / Altostratus'
+      - 'Cumulonimbus / Nimbostratus'
+      - 'Mixed Cloud'
+      
+  segmentation:
+    weight_path: "models/clouddeeplabv3.pth"
+    drive_id: "14uQx6dGlV8iCJdQqhWZ6KczfQa7XuaEA"
+    input_size: [512, 512] # [lebar, tinggi]
+
+analysis:
+  # Ekstensi file yang didukung
+  image_extensions: ['.jpeg', '.jpg', '.png', '.webp']
+  video_extensions: ['.avi', '.mov', '.mp4', '.mpeg4']
+  zip_extension: ".zip"
+  
+  # Parameter analisis
+  confidence_threshold: 0.05
+  top_k_preds: 3
+  segmentation_threshold: 0.5
+  
+  # Pemetaan Okta ke Kondisi Langit
+  sky_conditions:
+    - "Cerah"           # Oktaf 0-1
+    - "Sebagian Cerah"  # Oktaf 2
+    - "Sebagian Berawan"# Oktaf 3-4
+    - "Berawan"         # Oktaf 5-6
+    - "Hampir Tertutup" # Oktaf 7
+    - "Tertutup"        # Oktaf 8
