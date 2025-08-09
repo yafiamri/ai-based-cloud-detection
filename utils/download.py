@@ -1,69 +1,75 @@
 # utils/download.py
 import streamlit as st
 import base64
+import time
 from datetime import datetime
-from utils.export import export_csv, export_pdf, export_zip
+from typing import List, Dict, Any
 
-def download_controller(data, context="detect"):
+# Impor fungsi export dan konfigurasi
+from .export import export_csv, export_pdf, export_zip
+from .config import config
+
+def _create_download_link(file_path: str, link_text: str, file_name: str) -> str:
+    """Membuat link unduhan HTML dari sebuah file lokal."""
+    try:
+        with open(file_path, "rb") as f:
+            bytes_data = f.read()
+        b64 = base64.b64encode(bytes_data).decode()
+        return f'<a href="data:application/octet-stream;base64,{b64}" download="{file_name}">{link_text}</a>'
+    except FileNotFoundError:
+        return f"<p style='color:red;'>File tidak ditemukan: {file_name}</p>"
+
+def download_controller(data: List[Dict[str, Any]], context: str = "detect"):
+    """
+    Menampilkan komponen UI untuk mengunduh hasil analisis dalam berbagai format.
+
+    Args:
+        data (List[Dict[str, Any]]): Daftar dictionary hasil analisis.
+        context (str): Konteks pemanggilan untuk membuat key widget yang unik.
+    """
     if not data:
-        st.warning("Tidak ada data untuk diunduh.")
+        st.warning("Tidak ada data yang valid untuk diunduh.")
         return
     
-    # Inisialisasi
-    selected_format = None
-    nama_pengguna = ""
-    download_ready = False
-    error_msg = None
-    href = ""
+    col1, col2 = st.columns([0.4, 0.6])
+    with col1:
+        selected_format = st.selectbox(
+            "Pilih Format Unduhan:",
+            ["PDF", "CSV", "ZIP"],
+            key=f"format_{context}"
+        )
+    with col2:
+        default_user = config.get('app', {}).get('author', 'Pengguna')
+        nama_pengguna = st.text_input(
+            "Nama untuk Laporan PDF:",
+            value=default_user,
+            key=f"nama_{context}",
+            disabled=(selected_format != "PDF")
+        )
 
-    # Baris 1: Format + Nama
-    row1_col1, row1_col2, _ = st.columns([0.2, 0.3, 0.5])
-    with row1_col1:
-        selected_format = st.selectbox("Format", ["PDF", "CSV", "ZIP"], key=f"format_{context}")
-    with row1_col2:
-        if selected_format == "PDF":
-            nama_pengguna = st.text_input("Cantumkan nama untuk laporan PDF:", value="Yafi Amri", key=f"nama_{context}")
-        else:
-            st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🛠️ Buat File & Tampilkan Link Unduh", key=f"btn_{context}", use_container_width=True):
+        start_time = time.perf_counter() # Catat waktu mulai
+        with st.spinner("⏳ Sedang membuat file, mohon tunggu..."):
+            try:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S') + "_UTC"
+                link = ""
+                
+                if selected_format == "CSV":
+                    file_path = export_csv(data)
+                    link = _create_download_link(file_path, "💾 Unduh CSV", f"metadata_{context}_{timestamp}.csv")
+                elif selected_format == "ZIP":
+                    file_path = export_zip(data)
+                    link = _create_download_link(file_path, "📦 Unduh ZIP", f"archive_{context}_{timestamp}.zip")
+                elif selected_format == "PDF":
+                    if not nama_pengguna.strip():
+                        st.error("Nama untuk laporan PDF tidak boleh kosong.")
+                        return
+                    file_path = export_pdf(data, nama_pengguna)
+                    link = _create_download_link(file_path, "📑 Unduh PDF", f"report_{context}_{timestamp}.pdf")
+                duration = time.perf_counter() - start_time # Hitung durasi
+                st.success(f"✅ File siap dalam {duration:.2f} detik! Klik tautan di bawah untuk mengunduh.")
+                st.markdown(link, unsafe_allow_html=True)
 
-    # Baris 2: Tombol + Link
-    row2_col1, row2_col2, _ = st.columns([0.2, 0.3, 0.5])
-    with row2_col1:
-        clicked = st.button("🛠️ Buat File & Unduh", key=f"btn_{context}", use_container_width=True)
-    with row2_col2:
-        if clicked:
-            with st.spinner("⏳ Sedang membuat file, mohon tunggu..."):
-                try:
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-                    if selected_format == "CSV":
-                        csv_data = export_csv(data)
-                        b64 = base64.b64encode(csv_data).decode()
-                        href = f'<a href="data:file/csv;base64,{b64}" download="data_{context}_{timestamp}.csv">💾 Unduh CSV</a>'
-                        download_ready = True
-
-                    elif selected_format == "ZIP":
-                        zip_path = export_zip(data)
-                        with open(zip_path, "rb") as f:
-                            b64 = base64.b64encode(f.read()).decode()
-                        href = f'<a href="data:application/zip;base64,{b64}" download="citra_{context}_{timestamp}.zip">📦 Unduh ZIP</a>'
-                        download_ready = True
-
-                    elif selected_format == "PDF":
-                        pdf_path = export_pdf(data, nama_pengguna)
-                        with open(pdf_path, "rb") as f:
-                            b64 = base64.b64encode(f.read()).decode()
-                        href = f'<a href="data:application/pdf;base64,{b64}" download="laporan_{context}_{timestamp}.pdf">📑 Unduh PDF</a>'
-                        download_ready = True
-
-                except Exception as e:
-                    error_msg = str(e)
-
-        if href:
-            st.markdown(href, unsafe_allow_html=True)
-
-    # Baris 3: Notifikasi
-    if download_ready:
-        st.success("✅ File siap! Klik tautan di atas untuk mengunduh.")
-    elif error_msg:
-        st.error("❌ Gagal membuat file.")
-        st.exception(error_msg)
+            except Exception as e:
+                st.error(f"❌ Gagal membuat file: {e}")
+                st.exception(e) # Menampilkan detail error untuk debugging
