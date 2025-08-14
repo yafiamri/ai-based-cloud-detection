@@ -183,15 +183,24 @@ if st.session_state.live.get("source_info"):
             
             # 2. Logika untuk Twitch
             elif "twitch.tv" in display_url:
-               # Ekstrak nama channel dari URL
-               # Contoh: https://www.twitch.tv/channelname -> channelname
-               try:
-                   channel_name = display_url.strip().split('/')[-1]
-                   if channel_name:
-                       parent_domain = "ai-based-cloud-detection.streamlit.app"
-                       player_html = f'<iframe src="https://player.twitch.tv/?channel={channel_name}&parent={parent_domain}&muted=true" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allowfullscreen="true" scrolling="no"></iframe>'
-               except Exception:
-                   pass # Biarkan jatuh ke fallback jika parsing gagal
+                match = re.search(r"twitch\.tv/([a-zA-Z0-9_]+)", display_url)
+                if match:
+                    channel_name = match.group(1)
+                    # Dapatkan nama domain parent secara dinamis untuk production
+                    hostname = urlparse(st.get_option("server.baseUrlPath")).hostname or "localhost"
+                    player_html = f"""
+                        <div id="twitch-embed" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+                        <script src="https://embed.twitch.tv/embed/v1.js"></script>
+                        <script type="text/javascript">
+                          new Twitch.Embed("twitch-embed", {{
+                            width: "100%",
+                            height: "100%",
+                            channel: "{channel_name}",
+                            layout: "video",
+                            parent: ["{hostname}"]
+                          }});
+                        </script>
+                    """
             
             # 3. Fallback menggunakan HLS.js untuk platform lain
             if not player_html:
@@ -209,16 +218,16 @@ if st.session_state.live.get("source_info"):
                      }}
                    </script>
                """
-            # Gabungkan pemutar terpilih dengan wadah CSS responsif
-            components.html(
-                f"""
-                <div style="max-width: 800px; margin: auto;">
-                    <div style="position: relative; width: 100%; padding-bottom: {aspect_ratio_padding}%; height: 0; overflow: hidden;">
-                        {player_html}
-                    </div>
-                </div>
-                """
-            )
+            # Render pemutar yang terpilih
+            if player_html:
+                components.html(
+                    f'<div style="max-width: 800px; margin: auto;"><div style="position: relative; width: 100%; padding-bottom: {aspect_ratio_padding}%; height: 0;">{player_html}</div></div>',
+                    height=(h / w * 800) if w > 0 and w < 2000 else 600
+                )
+            else: # Fallback untuk RTSP atau jika player gagal dibuat
+                 _, col_img, _ = st.columns([1, 2, 1])
+                 with col_img:
+                    st.image(st.session_state.live["preview_frame"], caption="Pratinjau Statis dari Stream", use_container_width=True)
     else:
         st.warning("Tidak dapat memuat pratinjau stream untuk ditampilkan.")
 
