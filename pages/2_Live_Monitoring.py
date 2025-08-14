@@ -380,6 +380,7 @@ if st.session_state.live.get("running"):
             else: # Jika koneksi cap hilang
                 ret = False
         else: # Untuk URL web
+            stream_url_from_state = st.session_state.live["source_info"]["src"]
             frame = get_frame_from_live_url(stream_src_url)
             ret = frame is not None
         
