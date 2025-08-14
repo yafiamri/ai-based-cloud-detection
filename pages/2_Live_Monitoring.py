@@ -30,19 +30,13 @@ from utils.download import download_controller
 # Fungsi helper untuk memastikan aplikasi berjalan stabil di lingkungan cloud.
 def get_frame_from_stream(cap: cv2.VideoCapture) -> Optional[np.ndarray]:
     """
-    Membaca frame PALING BARU dari stream dengan membersihkan buffer terlebih dahulu.
-    Ini adalah kunci untuk mencegah analisis tertinggal dari siaran langsung.
+    Membaca satu frame dari objek VideoCapture yang baru dibuat.
+    Karena koneksi selalu baru, frame ini dijamin yang paling mutakhir.
     """
     if not cap or not cap.isOpened():
         return None
     try:
-        # Loop cap.grab() beberapa kali untuk membuang frame lama di buffer.
-        # Ini memastikan frame yang kita proses mendekati 'live'.
-        for _ in range(5):
-            cap.grab()
-        
-        # Ambil (retrieve) frame terakhir yang sudah di-grab
-        ret, frame = cap.retrieve()
+        ret, frame = cap.read()
         return frame if ret else None
     except Exception as e:
         print(f"Error saat membaca frame dari stream: {e}")
@@ -142,10 +136,11 @@ if st.session_state.live.get("source_info"):
     
     if st.session_state.live.get("preview_frame") is None and source_info.get("src"):
         with st.spinner("Mengambil gambar pratinjau dari stream..."):
-            cap = cv2.VideoCapture(source_info["src"])
-            if cap.isOpened():
-                ret, frame = cap.read()
-                cap.release()
+            # Buka dan tutup koneksi hanya untuk mendapatkan satu frame pratinjau
+            cap_preview = cv2.VideoCapture(source_info["src"])
+            if cap_preview.isOpened():
+                ret, frame = cap_preview.read()
+                cap_preview.release()
                 if ret:
                     st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
@@ -328,30 +323,37 @@ if st.session_state.live.get("running"):
         st.session_state.live["running"] = False
         st.rerun()
 
-    cap = cv2.VideoCapture(stream_url)
-    if not cap.isOpened():
-        st.error(f"Gagal membuka stream dari URL. Monitoring dihentikan.")
-        st.session_state.live["running"] = False
-        st.rerun()
-
     pipeline_hash = get_pipeline_version_hash()
     consecutive_failures = 0
-    MAX_FAILURES = 5
+    MAX_FAILURES = 3
 
     while st.session_state.live.get("running"):
         loop_start_time = time.time()
         
-        info_placeholder.info(f"Mengambil frame terbaru dari stream...", icon="📸")
+        info_placeholder.info(f"Membuka koneksi baru ke stream untuk mendapatkan frame termutakhir...", icon="🔗")
+        
+        cap = cv2.VideoCapture(stream_url)
+        if not cap.isOpened():
+            consecutive_failures += 1
+            info_placeholder.warning(f"Gagal membuka koneksi stream (percobaan {consecutive_failures}/{MAX_FAILURES}).")
+            if consecutive_failures >= MAX_FAILURES:
+                st.error("Gagal membuka koneksi beberapa kali. Monitoring dihentikan.")
+                st.session_state.live["running"] = False
+                st.rerun()
+            time.sleep(5) # Tunggu lebih lama jika koneksi gagal
+            continue
+
         frame = get_frame_from_stream(cap)
+        cap.release() # Langsung tutup koneksi setelah frame didapat
         
         if frame is None:
             consecutive_failures += 1
-            info_placeholder.warning(f"Gagal mengambil frame (percobaan {consecutive_failures}/{MAX_FAILURES}). Stream mungkin terganggu.")
+            info_placeholder.warning(f"Gagal mengambil frame dari koneksi baru (percobaan {consecutive_failures}/{MAX_FAILURES}).")
             if consecutive_failures >= MAX_FAILURES:
-                st.error("Gagal mengambil frame beberapa kali. Stream mungkin berakhir. Monitoring dihentikan.")
+                st.error("Gagal mengambil frame beberapa kali. Stream mungkin tidak stabil. Monitoring dihentikan.")
                 st.session_state.live["running"] = False
                 st.rerun()
-            time.sleep(2) # Tunggu sejenak jika terjadi eror sebelum mencoba lagi
+            time.sleep(2)
             continue
 
         consecutive_failures = 0
@@ -433,7 +435,6 @@ if st.session_state.live.get("running"):
         with result_placeholder.container():
             render_result(db_entry)
 
-        # Hitung waktu tidur yang presisi
         interval = st.session_state.live.get("interval", 10)
         sleep_duration = interval - analysis_duration
 
@@ -441,10 +442,6 @@ if st.session_state.live.get("running"):
             info_placeholder.info(f"Analisis selesai dalam {analysis_duration:.2f} detik. Menunggu {sleep_duration:.2f} detik untuk siklus berikutnya...", icon="⏱️")
             time.sleep(sleep_duration)
 
-    if cap:
-        cap.release()
-    
-    # Rerun sekali untuk menampilkan ringkasan setelah monitoring dihentikan
     if not st.session_state.live.get("running"):
         st.rerun()
 
