@@ -173,16 +173,16 @@ if st.session_state.live.get("source_info"):
             display_url = source_info["display_url"]
             stream_url = source_info["src"]
             
-           player_html = ""
-           # 1. Logika untuk YouTube
-           if "youtube.com" in display_url or "youtu.be" in display_url:
+            player_html = ""
+            # 1. Logika untuk YouTube
+            if "youtube.com" in display_url or "youtu.be" in display_url:
                match = re.search(r"(?:v=|\/|live\/)([0-9A-Za-z_-]{11})", display_url)
                if match:
                    video_id = match.group(1)
                    player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0&mute=1" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>'
-
-           # 2. Logika untuk Twitch
-           elif "twitch.tv" in display_url:
+            
+            # 2. Logika untuk Twitch
+            elif "twitch.tv" in display_url:
                # Ekstrak nama channel dari URL
                # Contoh: https://www.twitch.tv/channelname -> channelname
                try:
@@ -192,9 +192,9 @@ if st.session_state.live.get("source_info"):
                        player_html = f'<iframe src="https://player.twitch.tv/?channel={channel_name}&parent={parent_domain}&muted=true" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allowfullscreen="true" scrolling="no"></iframe>'
                except Exception:
                    pass # Biarkan jatuh ke fallback jika parsing gagal
-
-           # 3. Fallback menggunakan HLS.js untuk platform lain
-           if not player_html:
+            
+            # 3. Fallback menggunakan HLS.js untuk platform lain
+            if not player_html:
                player_html = f"""
                    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
                    <video id="live-video" controls muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></video>
