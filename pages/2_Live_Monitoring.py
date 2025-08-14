@@ -30,14 +30,19 @@ from utils.download import download_controller
 # Fungsi helper untuk memastikan aplikasi berjalan stabil di lingkungan cloud.
 def get_frame_from_stream(cap: cv2.VideoCapture) -> Optional[np.ndarray]:
     """
-    Membaca satu frame dari objek VideoCapture yang sudah diinisialisasi.
-    Ini adalah metode yang lebih andal dan efisien daripada mengunduh segmen.
+    Membaca frame PALING BARU dari stream dengan membersihkan buffer terlebih dahulu.
+    Ini adalah kunci untuk mencegah analisis tertinggal dari siaran langsung.
     """
     if not cap or not cap.isOpened():
         return None
     try:
-        # Mengambil frame terbaru dari buffer untuk mengurangi latensi
-        cap.grab()
+        # Loop cap.grab() beberapa kali untuk membuang frame lama di buffer.
+        # Ini memastikan frame yang kita proses mendekati 'live'.
+        # Untuk stream 30fps, 5-10 kali grab sudah cukup membuang buffer beberapa saat.
+        for _ in range(5):
+            cap.grab()
+        
+        # Ambil (retrieve) frame terakhir yang sudah di-grab
         ret, frame = cap.retrieve()
         return frame if ret else None
     except Exception as e:
@@ -136,7 +141,6 @@ if st.session_state.live.get("source_info"):
 
     source_info = st.session_state.live["source_info"]
     
-    # --- LOGIKA PENGAMBILAN PRATINJAU ---
     if st.session_state.live.get("preview_frame") is None and source_info.get("src"):
         with st.spinner("Mengambil gambar pratinjau dari stream..."):
             cap = cv2.VideoCapture(source_info["src"])
@@ -146,7 +150,6 @@ if st.session_state.live.get("source_info"):
                 if ret:
                     st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-    # --- TAMPILKAN PRATINJAU DARI SESSION STATE ---
     if st.session_state.live.get("preview_frame"):
         player_max_width = 800
         player_height = int(player_max_width * (9 / 16))
@@ -159,7 +162,7 @@ if st.session_state.live.get("source_info"):
             match = re.search(r"(?:v=|\/|live\/|embed\/|shorts\/)([0-9A-Za-z_-]{11})", display_url)
             if match:
                 video_id = match.group(1)
-                player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0&mute=1" width="100%" height="{player_height}px" style="border:none;" allow="autoplay; fullscreen"></iframe>'
+                player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0&mute=1" width="100%" height="{player_height}px" style="border:none;" allow="fullscreen"></iframe>'
         
         elif "twitch.tv" in display_url:
             match = re.search(r"twitch\.tv/([a-zA-Z0-9_]+)", display_url)
