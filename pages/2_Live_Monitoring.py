@@ -174,8 +174,13 @@ if st.session_state.live.get("source_info"):
         # Render pemutar yang terpilih
         if player_html:
             components.html(
-                f'<div style="max-width: 800px; margin: auto;"><div style="position: relative; width: 100%; padding-bottom: {aspect_ratio_padding}%; height: 0;">{player_html}</div></div>',
-                height=(h / w * 800) if w > 0 and w < 2000 else 600
+                f"""
+                <div style="max-width: 800px; margin: auto;">
+                    <div style="position: relative; width: 100%; padding-bottom: {aspect_ratio_padding}%; height: 0; overflow: hidden;">
+                        {player_html}
+                    </div>
+                </div>
+                """
             )
         else: # Fallback untuk RTSP atau jika player gagal dibuat
              _, col_img, _ = st.columns([1, 2, 1])
