@@ -38,7 +38,6 @@ def get_frame_from_stream(cap: cv2.VideoCapture) -> Optional[np.ndarray]:
     try:
         # Loop cap.grab() beberapa kali untuk membuang frame lama di buffer.
         # Ini memastikan frame yang kita proses mendekati 'live'.
-        # Untuk stream 30fps, 5-10 kali grab sudah cukup membuang buffer beberapa saat.
         for _ in range(5):
             cap.grab()
         
@@ -318,7 +317,7 @@ if not st.session_state.live.get("running") and st.session_state.live.get("last_
         render_result(st.session_state.live.get("last_result"))
 
 if st.session_state.live.get("running"):
-    info_placeholder.info(f"Monitoring sedang berlangsung. Menganalisis setiap {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
+    info_placeholder.info(f"Monitoring sedang berlangsung. Menunggu interval {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
     st.toast("Monitoring dimulai!", icon="👀")
 
     source_info = st.session_state.live["source_info"]
@@ -336,19 +335,13 @@ if st.session_state.live.get("running"):
         st.rerun()
 
     pipeline_hash = get_pipeline_version_hash()
-    last_analysis_time = 0
     consecutive_failures = 0
     MAX_FAILURES = 5
 
     while st.session_state.live.get("running"):
-        current_time_for_loop = time.time()
-        if current_time_for_loop - last_analysis_time < st.session_state.live.get("interval", 10):
-            time.sleep(1)
-            continue
+        loop_start_time = time.time()
         
-        analysis_start_time = time.time()
-        last_analysis_time = analysis_start_time
-        
+        info_placeholder.info(f"Mengambil frame terbaru dari stream...", icon="📸")
         frame = get_frame_from_stream(cap)
         
         if frame is None:
@@ -357,10 +350,12 @@ if st.session_state.live.get("running"):
             if consecutive_failures >= MAX_FAILURES:
                 st.error("Gagal mengambil frame beberapa kali. Stream mungkin berakhir. Monitoring dihentikan.")
                 st.session_state.live["running"] = False
+                st.rerun()
+            time.sleep(2) # Tunggu sejenak jika terjadi eror sebelum mencoba lagi
             continue
 
         consecutive_failures = 0
-        info_placeholder.info(f"Monitoring sedang berlangsung. Menganalisis setiap {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
+        info_placeholder.info(f"Frame berhasil diambil. Memulai analisis...", icon="🔬")
         
         # --- MULAI BLOK ANALISIS ---
         pil_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -413,6 +408,7 @@ if st.session_state.live.get("running"):
         relative_mask = os.path.relpath(mask_path).replace("\\", "/")
         relative_overlay = os.path.relpath(overlay_path).replace("\\", "/")
 
+        analysis_duration = time.time() - loop_start_time
         db_entry = {
             **analysis_data,
             "pipeline_version_hash": get_pipeline_version_hash(),
@@ -422,7 +418,7 @@ if st.session_state.live.get("running"):
             "media_type": "live_frame",
             "file_size_bytes": file_size,
             "analyzed_at": datetime.now(timezone(timedelta(hours=7))).isoformat(),
-            "analysis_duration_sec": time.time() - analysis_start_time,
+            "analysis_duration_sec": analysis_duration,
             "original_path": relative_original,
             "mask_path": relative_mask,
             "overlay_path": relative_overlay,
@@ -437,9 +433,18 @@ if st.session_state.live.get("running"):
         with result_placeholder.container():
             render_result(db_entry)
 
+        # Hitung waktu tidur yang presisi
+        interval = st.session_state.live.get("interval", 10)
+        sleep_duration = interval - analysis_duration
+
+        if sleep_duration > 0:
+            info_placeholder.info(f"Analisis selesai dalam {analysis_duration:.2f} detik. Menunggu {sleep_duration:.2f} detik untuk siklus berikutnya...", icon="⏱️")
+            time.sleep(sleep_duration)
+
     if cap:
         cap.release()
     
+    # Rerun sekali untuk menampilkan ringkasan setelah monitoring dihentikan
     if not st.session_state.live.get("running"):
         st.rerun()
 
