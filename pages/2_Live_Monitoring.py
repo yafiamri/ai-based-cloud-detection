@@ -175,6 +175,7 @@ if st.session_state.live.get("source_info"):
                         height: {player_height},
                         channel: "{channel_name}",
                         layout: "video",
+                        muted: true,
                         parent: ["{hostname}"]
                       }});
                     </script>
