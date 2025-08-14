@@ -144,20 +144,19 @@ if st.session_state.live.get("source_info"):
     # Ambil tipe sumber (rtsp, web, youtube, dll.)
     source_info = st.session_state.live["source_info"]
     source_type = source_info.get("type")
-    
+        
     # --- LOGIKA PENGAMBILAN PRATINJAU ---
     # Periksa dulu apakah pratinjau sudah ada. Jika belum, baru ambil.
-# Periksa dulu apakah pratinjau sudah ada. Jika belum, baru ambil.
-if st.session_state.live.get("preview_frame") is None:
-    with st.spinner("Mengambil gambar pratinjau dari stream..."):
-        # Ambil URL stream mentah dari source_info
-        stream_src_url = st.session_state.live["source_info"]["src"]
-        
-        # Gunakan fungsi baru untuk mengambil frame
-        frame = get_frame_from_live_url(stream_src_url)
-
-        if frame is not None:
-            st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    if st.session_state.live.get("preview_frame") is None:
+        with st.spinner("Mengambil gambar pratinjau dari stream..."):
+            # Ambil URL stream mentah dari source_info
+            stream_src_url = st.session_state.live["source_info"]["src"]
+            
+            # Gunakan fungsi baru untuk mengambil frame
+            frame = get_frame_from_live_url(stream_src_url)
+    
+            if frame is not None:
+                st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
     # --- TAMPILKAN PRATINJAU DARI SESSION STATE ---
     # Blok ini sekarang hanya menampilkan apa yang sudah ada di state
@@ -362,16 +361,12 @@ if st.session_state.live.get("running"):
         
         # 3. Ambil frame menggunakan metode yang sesuai
         frame = None
-        stream_src_url = st.session_state.live["source_info"]["src"]
-
         if is_rtsp:
-            # Logika untuk RTSP tetap sama, namun lebih baik dikelola di dalam fungsi
             if cap and cap.isOpened():
                 ret, frame = cap.read()
-            else:
+            else: # Jika koneksi cap hilang
                 ret = False
-        else: # Untuk URL web (Twitch, dll)
-            # Gunakan fungsi baru yang efisien
+        else: # Untuk URL web
             frame = get_frame_from_live_url(stream_src_url)
             ret = frame is not None
         
