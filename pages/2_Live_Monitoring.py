@@ -213,12 +213,12 @@ if st.session_state.live.get("source_info"):
             components.html(
                 f"""
                 <div style="max-width: 800px; margin: auto;">
-                    <div style="position: relative; width: 100%; padding-bottom: {aspect_ratio_padding}%; height: 0;">
+                    <div style="position: relative; width: 100%; padding-bottom: {aspect_ratio_padding}%; height: 0; overflow: hidden;">
                         {player_html}
                     </div>
                 </div>
                 """,
-                height=(h / w * 800) if w > 0 else 600
+                height=aspect_ratio_padding + 20 # Berikan sedikit ruang tambahan
             )
     else:
         st.warning("Tidak dapat memuat pratinjau stream untuk ditampilkan.")
