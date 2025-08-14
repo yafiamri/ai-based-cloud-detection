@@ -173,28 +173,42 @@ if st.session_state.live.get("source_info"):
             display_url = source_info["display_url"]
             stream_url = source_info["src"]
             
-            player_html = ""
-            if "youtube.com" in display_url or "youtu.be" in display_url:
-                # Gunakan iframe embed resmi untuk YouTube
-                match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", display_url)
-                if match:
-                    video_id = match.group(1)
-                    player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allowfullscreen></iframe>'
-            if not player_html:
-                # Gunakan HLS.js untuk platform lain (Twitch, dll.)
-                player_html = f"""
-                    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-                    <video id="live-video" controls muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></video>
-                    <script>
-                      var video = document.getElementById('live-video');
-                      var streamUrl = "{stream_url}";
-                      if(Hls.isSupported()) {{
-                        var hls = new Hls();
-                        hls.loadSource(streamUrl);
-                        hls.attachMedia(video);
-                      }}
-                    </script>
-                """
+           player_html = ""
+           # 1. Logika untuk YouTube
+           if "youtube.com" in display_url or "youtu.be" in display_url:
+               match = re.search(r"(?:v=|\/|live\/)([0-9A-Za-z_-]{11})", display_url)
+               if match:
+                   video_id = match.group(1)
+                   player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0&mute=1" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>'
+
+           # 2. Logika untuk Twitch
+           elif "twitch.tv" in display_url:
+               # Ekstrak nama channel dari URL
+               # Contoh: https://www.twitch.tv/channelname -> channelname
+               try:
+                   channel_name = display_url.strip().split('/')[-1]
+                   if channel_name:
+                       parent_domain = "ai-based-cloud-detection.streamlit.app"
+                       player_html = f'<iframe src="https://player.twitch.tv/?channel={channel_name}&parent={parent_domain}&muted=true" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allowfullscreen="true" scrolling="no"></iframe>'
+               except Exception:
+                   pass # Biarkan jatuh ke fallback jika parsing gagal
+
+           # 3. Fallback menggunakan HLS.js untuk platform lain
+           if not player_html:
+               player_html = f"""
+                   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+                   <video id="live-video" controls muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></video>
+                   <script>
+                     var video = document.getElementById('live-video');
+                     var streamUrl = "{stream_url}";
+                     if(Hls.isSupported()) {{
+                       var hls = new Hls();
+                       hls.loadSource(streamUrl);
+                       hls.attachMedia(video);
+                       video.play(); // Coba mainkan otomatis
+                     }}
+                   </script>
+               """
             # Gabungkan pemutar terpilih dengan wadah CSS responsif
             components.html(
                 f"""
