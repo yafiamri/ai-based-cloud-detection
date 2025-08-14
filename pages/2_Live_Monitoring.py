@@ -104,7 +104,7 @@ seed = st.session_state.widget_seed
 
 with st.form(key=f"url_form_live_{seed}"):
     url_input = st.text_input("Tempel URL siaran langsung di sini",
-                              placeholder="https://https://www.twitch.tv/yafiamri", 
+                              placeholder="https://www.twitch.tv/USERNAME", 
                               help="Masukkan URL siaran langsung (hanya dari Twitch yang didukung oleh sistem saat ini)",
                               key=f"live_url_input_{seed}"
                               )
