@@ -121,34 +121,40 @@ if st.session_state.live.get("source_info"):
                     st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
     if st.session_state.live.get("preview_frame"):
-        preview_img = st.session_state.live["preview_frame"]
-        w, h = preview_img.size
-        aspect_ratio_padding = (h / w * 100) if w > 0 else 75.0
-        display_url = source_info["display_url"]
+        # --- PERUBAHAN DIMULAI DI SINI: Logika Pratinjau yang Disederhanakan ---
         
-        # --- PERUBAHAN BARU: Logika Pemutar Video yang Cerdas ---
+        # Tetapkan ukuran dasar pemutar. Lebar 800px adalah nilai maksimum yang baik.
+        player_max_width = 800
+        # Hitung tinggi berdasarkan rasio aspek standar (16:9) agar konsisten.
+        player_height = int(player_max_width * (9 / 16))
+
+        display_url = source_info["display_url"]
+        stream_url = source_info.get("src")
+        
         player_html = ""
+        
         # 1. Logika untuk YouTube
         if "youtube.com" in display_url or "youtu.be" in display_url:
             match = re.search(r"(?:v=|\/|live\/|embed\/|shorts\/)([0-9A-Za-z_-]{11})", display_url)
             if match:
                 video_id = match.group(1)
-                player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0&mute=1" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allow="autoplay; fullscreen"></iframe>'
+                # Gunakan iframe dengan ukuran yang sudah dihitung
+                player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0&mute=1" width="100%" height="{player_height}px" style="border:none;" allow="autoplay; fullscreen"></iframe>'
         
-        # 2. Logika BARU untuk Twitch menggunakan embed resmi
+        # 2. Logika untuk Twitch
         elif "twitch.tv" in display_url:
             match = re.search(r"twitch\.tv/([a-zA-Z0-9_]+)", display_url)
             if match:
                 channel_name = match.group(1)
-                # Dapatkan nama domain parent secara dinamis untuk production
                 hostname = urlparse(st.get_option("server.baseUrlPath")).hostname or "localhost"
+                # Gunakan embed resmi dengan ukuran yang sudah dihitung
                 player_html = f"""
-                    <div id="twitch-embed" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+                    <div id="twitch-embed"></div>
                     <script src="https://embed.twitch.tv/embed/v1.js"></script>
                     <script type="text/javascript">
                       new Twitch.Embed("twitch-embed", {{
                         width: "100%",
-                        height: "100%",
+                        height: {player_height},
                         channel: "{channel_name}",
                         layout: "video",
                         parent: ["{hostname}"]
@@ -156,11 +162,12 @@ if st.session_state.live.get("source_info"):
                     </script>
                 """
 
-        # 3. Logika Fallback untuk platform lain (menggunakan HLS.js)
+        # 3. Logika Fallback untuk platform lain
         if not player_html and source_info.get("type") != "rtsp":
+            # Gunakan tag <video> standar dengan ukuran yang dihitung
             player_html = f"""
                 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-                <video id="live-video" controls muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></video>
+                <video id="live-video" controls muted width="100%" height="{player_height}px" style="background-color:black;"></video>
                 <script>
                   var video = document.getElementById('live-video');
                   if(Hls.isSupported()) {{
@@ -171,22 +178,18 @@ if st.session_state.live.get("source_info"):
                 </script>
             """
         
-        # Render pemutar yang terpilih
+        # Render pemutar yang terpilih di dalam wadah yang terpusat
         if player_html:
             components.html(
-                f"""
-                <div style="max-width: 800px; margin: auto;">
-                    <div style="position: relative; width: 100%; padding-bottom: {aspect_ratio_padding}%; height: 0; overflow: hidden;">
-                        {player_html}
-                    </div>
-                </div>
-                """
+                f'<div style="max-width:{player_max_width}px; margin: auto;">{player_html}</div>',
+                # Berikan sedikit ruang ekstra (misal, 40px) untuk memastikan tidak ada yang terpotong
+                height=player_height + 40 
             )
-        else: # Fallback untuk RTSP atau jika player gagal dibuat
+        else: # Fallback untuk RTSP
              _, col_img, _ = st.columns([1, 2, 1])
              with col_img:
                 st.image(st.session_state.live["preview_frame"], caption="Pratinjau Statis dari Stream", use_container_width=True)
-        # --- AKHIR DARI PERUBAHAN BARU ---
+        # --- AKHIR DARI PERUBAHAN ---
 
     else:
         st.warning("Tidak dapat memuat pratinjau stream untuk ditampilkan.")
