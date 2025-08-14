@@ -28,20 +28,12 @@ from utils.download import download_controller
 
 # Fungsi helper untuk memastikan aplikasi berjalan stabil di lingkungan cloud.
 def get_frame_via_download(stream_url: str) -> Optional[np.ndarray]:
-# --- PERUBAHAN 1: Mengganti fungsi unduh dengan fungsi baca stream yang efisien ---
-def get_frame_from_stream(cap: cv2.VideoCapture) -> Optional[np.ndarray]:
     """
     Mengunduh segmen pendek dari stream menggunakan yt-dlp, memprosesnya
     untuk memastikan file valid, lalu membaca frame dari file lokal tersebut.
     Ini adalah metode paling andal untuk lingkungan cloud.
-    Membaca satu frame dari objek VideoCapture yang sudah diinisialisasi.
-    Ini adalah metode yang lebih efisien dan andal untuk live stream.
     """
     temp_clip_path = None
-    if not cap or not cap.isOpened():
-        print("Koneksi VideoCapture tidak valid atau sudah ditutup.")
-        return None
-    
     try:
         # 1. Buat file temporer dengan aman
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_clip:
@@ -71,21 +63,15 @@ def get_frame_from_stream(cap: cv2.VideoCapture) -> Optional[np.ndarray]:
         ret, frame = cap.read()
         cap.release()
         
-        # Coba ambil frame beberapa kali jika perlu, karena stream bisa buffer
-        for _ in range(3):
-            cap.grab() # Ambil frame terbaru dari buffer tanpa decoding
-        ret, frame = cap.retrieve() # Decode dan kembalikan frame yang terakhir diambil
         return frame if ret else None
     
     except Exception as e:
         print(f"Error dalam fungsi get_frame_via_download: {e}")
-        print(f"Error saat membaca frame dari stream: {e}")
         return None
     finally:
         # 5. Bagian krusial: Pastikan file temporer selalu dihapus
         if temp_clip_path and os.path.exists(temp_clip_path):
             os.remove(temp_clip_path)
-# --- AKHIR DARI PERUBAHAN 1 ---
 
 # --- 1. Konfigurasi Halaman & Inisialisasi State ---
 st.set_page_config(page_title=f"Live Monitoring - {config['app']['title']}", layout="wide")
@@ -162,7 +148,7 @@ if submitted:
 
         with st.spinner("Memvalidasi URL siaran langsung..."):
             source_info, msg = fetch_live_stream_source(url_input)
-
+        
         if source_info:
             st.toast("URL siaran langsung berhasil divalidasi!", icon="✅")
             st.session_state.live["source_info"] = source_info
@@ -183,16 +169,12 @@ if st.session_state.live.get("source_info"):
     
     # --- LOGIKA PENGAMBILAN PRATINJAU ---
     # Periksa dulu apakah pratinjau sudah ada. Jika belum, baru ambil.
-    stream_url = source_info.get("src")
-
     if st.session_state.live.get("preview_frame") is None:
         with st.spinner("Mengambil gambar pratinjau dari stream..."):
             frame = None
             if source_type == "rtsp":
                 # Untuk RTSP, ambil frame langsung dengan OpenCV
                 cap = cv2.VideoCapture(source_info["src"])
-            cap = cv2.VideoCapture(stream_url)
-            if cap.isOpened():
                 ret, frame = cap.read()
                 cap.release()
             else:
@@ -204,9 +186,6 @@ if st.session_state.live.get("source_info"):
 
     # --- TAMPILKAN PRATINJAU DARI SESSION STATE ---
     # Blok ini sekarang hanya menampilkan apa yang sudah ada di state
-                if ret:
-                    st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    
     if st.session_state.live.get("preview_frame"):
         if source_type == "rtsp":
             # Gunakan kolom untuk membatasi lebar dan memposisikan di tengah
@@ -243,34 +222,6 @@ if st.session_state.live.get("source_info"):
                     </script>
                 """
             # Gabungkan pemutar terpilih dengan wadah CSS responsif
-        preview_img = st.session_state.live["preview_frame"]
-        w, h = preview_img.size
-        aspect_ratio_padding = (h / w * 100) if w > 0 else 75.0
-        display_url = source_info["display_url"]
-        
-        player_html = ""
-        if "youtube.com" in display_url or "youtu.be" in display_url:
-            match = re.search(r"(?:v=|\/|live\/|embed\/|shorts\/)([0-9A-Za-z_-]{11})", display_url)
-            if match:
-                video_id = match.group(1)
-                player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allowfullscreen></iframe>'
-        
-        if not player_html and source_info.get("type") != "rtsp":
-            player_html = f"""
-                <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-                <video id="live-video" controls muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></video>
-                <script>
-                  var video = document.getElementById('live-video');
-                  var streamUrl = "{stream_url}";
-                  if(Hls.isSupported()) {{
-                    var hls = new Hls();
-                    hls.loadSource(streamUrl);
-                    hls.attachMedia(video);
-                  }}
-                </script>
-            """
-        
-        if player_html:
             components.html(
                 f"""
                 <div style="max-width: 800px; margin: auto;">
@@ -280,13 +231,7 @@ if st.session_state.live.get("source_info"):
                 </div>
                 """,
                 height=(h / w * 800) if w > 0 else 600
-                height=(h / w * 800) if w > 0 and w < 2000 else 600
             )
-        else: # Fallback untuk RTSP atau jika player gagal dibuat
-             _, col_img, _ = st.columns([1, 2, 1])
-             with col_img:
-                st.image(st.session_state.live["preview_frame"], caption="Pratinjau Statis dari Stream", use_container_width=True)
-
     else:
         st.warning("Tidak dapat memuat pratinjau stream untuk ditampilkan.")
 
@@ -313,19 +258,13 @@ with st.container(border=True):
             disabled=is_config_disabled, 
             help="Seberapa sering analisis akan dijalankan."
         )
-        st.slider("Interval antar-*frame* (detik)", 10, 600, 
-                  value=st.session_state.live.get("interval", 10), 
-                  step=5, key=interval_key, on_change=update_live_config,
-                  args=("interval", interval_key), disabled=is_config_disabled, 
-                  help="Seberapa sering analisis akan dijalankan.")
     with col2:
         roi_options = ["Otomatis", "Manual (Kotak)", "Manual (Poligon)", "Manual (Diameter Lingkaran)"]
-        roi_options = ["Otomatis", "Manual (Kotak)", "Manual (Poligon)"]
         try:
             current_roi_index = roi_options.index(st.session_state.live.get("roi_method", "Otomatis"))
         except ValueError:
             current_roi_index = 0
-
+        
         roi_key = "live_roi_widget"
         st.selectbox(
             "Metode (*Region of Interest*) ROI:", roi_options,
@@ -335,9 +274,6 @@ with st.container(border=True):
             args=("roi_method", roi_key),
             disabled=is_config_disabled
         )
-        st.selectbox("Metode ROI:", roi_options, index=current_roi_index, key=roi_key,
-                     on_change=update_live_config, args=("roi_method", roi_key),
-                     disabled=is_config_disabled)
     with col3:
         save_key = "live_save_widget"
         st.toggle(
@@ -349,11 +285,6 @@ with st.container(border=True):
             disabled=is_config_disabled, 
             help="Jika aktif, setiap frame yang dianalisis akan disimpan ke database riwayat."
         )
-        st.toggle("Simpan hasil ke riwayat", 
-                  value=st.session_state.live.get("save_to_history", True),
-                  key=save_key, on_change=update_live_config, args=("save_to_history", save_key),
-                  disabled=is_config_disabled, 
-                  help="Jika aktif, setiap frame yang dianalisis akan disimpan ke database riwayat.")
 
 user_roi_mask = None
 if "Manual" in st.session_state.live.get("roi_method", "Otomatis") and not is_config_disabled:
@@ -376,14 +307,9 @@ if "Manual" in st.session_state.live.get("roi_method", "Otomatis") and not is_co
             # 4. itung ulang lebar jika tingginya dipotong,
             if canvas_h == MAX_CANVAS_HEIGHT and ratio > 0:
                 canvas_w = int(canvas_h / ratio)
-            canvas_w, canvas_h = 512, int(512 * ratio)
-            if canvas_h > 600:
-                canvas_h = 600
-                canvas_w = int(canvas_h / ratio) if ratio > 0 else 512
-
+            
             roi_method_selected = st.session_state.live["roi_method"]
             drawing_mode = "rect" if "Kotak" in roi_method_selected else "polygon" if "Poligon" in roi_method_selected else "line"
-            drawing_mode = "rect" if "Kotak" in roi_method_selected else "polygon"
 
             canvas_result = st_canvas(
                 fill_color="rgba(255, 0, 0, 0.3)", stroke_width=2,
@@ -391,7 +317,6 @@ if "Manual" in st.session_state.live.get("roi_method", "Otomatis") and not is_co
                 height=canvas_h, width=canvas_w, 
                 drawing_mode=drawing_mode,
                 key="live_canvas"
-                drawing_mode=drawing_mode, key="live_canvas"
             )
             # Simpan hasil kanvas ke dalam session state
             st.session_state.live['canvas'] = canvas_result
@@ -400,7 +325,6 @@ if "Manual" in st.session_state.live.get("roi_method", "Otomatis") and not is_co
                 user_roi_mask = canvas_to_mask(canvas_result, h, w)
         else:
             st.warning("Tidak bisa menampilkan pratinjau untuk kanvas ROI. Berkas mungkin korup atau formatnya tidak didukung.")
-            st.warning("Tidak bisa menampilkan pratinjau untuk kanvas ROI.")
 
 # --- Langkah 3: Jalankan Monitoring & Tampilkan Hasil ---
 section_divider("Langkah 3: Jalankan Monitoring", "🚀")
@@ -424,13 +348,11 @@ info_placeholder = st.empty()
 result_placeholder = st.empty()
             
 # Tampilkan hasil terakhir jika monitoring tidak berjalan (misalnya setelah dihentikan)
-        
 if not st.session_state.live.get("running") and st.session_state.live.get("last_result"):
     with result_placeholder.container():
         render_result(st.session_state.live.get("last_result"))
 
 # Blok utama yang hanya berjalan saat monitoring aktif
-# --- PERUBAHAN 2: Merevisi seluruh blok loop monitoring ---
 if st.session_state.live.get("running"):
     info_placeholder.info(f"Monitoring sedang berlangsung. Menganalisis setiap {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
     st.toast("Monitoring dimulai!", icon="👀")
@@ -450,42 +372,19 @@ if st.session_state.live.get("running"):
             st.rerun()
 
     # Penanganan eror
-    # 1. Ambil informasi stream yang sudah divalidasi
-    source_info = st.session_state.live["source_info"]
-    stream_url = source_info.get("src")
-
-    # Jika URL stream tidak ada, hentikan proses
-    if not stream_url:
-        st.error("URL stream tidak valid. Monitoring dihentikan.")
-        st.session_state.live["running"] = False
-        st.rerun()
-
-    # 2. Buka koneksi stream sekali saja di luar loop
-    cap = cv2.VideoCapture(stream_url)
-    if not cap.isOpened():
-        st.error(f"Gagal membuka stream dari URL. Periksa kembali URL atau koneksi. Monitoring dihentikan.")
-        st.session_state.live["running"] = False
-        st.rerun()
-
-    # Inisialisasi variabel untuk loop
     pipeline_hash = get_pipeline_version_hash()
     last_analysis_time = 0
     consecutive_failures = 0
     MAX_FAILURES = 3
-    MAX_FAILURES = 5 # Tingkatkan batas kegagalan untuk stream yang kurang stabil
 
     while st.session_state.live.get("running"):
         current_time = time.time()
         if current_time - last_analysis_time < st.session_state.live.get("interval", 10):
-        current_time_for_loop = time.time()
-        if current_time_for_loop - last_analysis_time < st.session_state.live.get("interval", 10):
             time.sleep(1)
             continue
-
+        
         last_analysis_time = current_time
-        analysis_start_time = time.time() # Waktu mulai analisis
-        last_analysis_time = analysis_start_time
-
+        
         # 3. Ambil frame menggunakan metode yang sesuai
         frame = None
         if is_rtsp:
@@ -496,32 +395,24 @@ if st.session_state.live.get("running"):
         else: # Untuk URL web
             frame = get_frame_via_download(url)
             ret = frame is not None
-        # 3. Ambil frame menggunakan metode baru yang efisien
-        frame = get_frame_from_stream(cap)
-
+        
         if not ret or frame is None:
-        if frame is None:
             consecutive_failures += 1
             result_placeholder.warning(f"Gagal mengambil frame (percobaan {consecutive_failures}/{MAX_FAILURES}). Stream mungkin terganggu.")
-            info_placeholder.warning(f"Gagal mengambil frame (percobaan {consecutive_failures}/{MAX_FAILURES}). Stream mungkin terganggu.")
             if consecutive_failures >= MAX_FAILURES:
                 st.error("Gagal mengambil frame beberapa kali. Stream mungkin berakhir. Monitoring dihentikan.")
                 st.session_state.live["running"] = False
                 st.rerun()
             # Jika belum maks, lewati dan tampilkan kembali hasil terakhir
             continue
-            continue # Lanjutkan ke iterasi berikutnya
 
         # Jika berhasil, reset penghitung kegagalan
         consecutive_failures = 0
         
         # --- MULAI BLOK ANALISIS ---
         # Lakukan analisis pada frame terakhir yang dibaca
-        info_placeholder.info(f"Monitoring sedang berlangsung. Menganalisis setiap {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
-
-        # --- BLOK ANALISIS (Ini adalah kode asli Anda yang dipertahankan) ---
         pil_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
+        
         # Kumpulkan konfigurasi yang sedang aktif untuk analisis ini
         live_config = {
             "roi_method": st.session_state.live.get("roi_method", "Otomatis"),
@@ -537,7 +428,7 @@ if st.session_state.live.get("running"):
                 user_roi_mask = canvas_to_mask(canvas_data, pil_frame.height, pil_frame.width)
             else:
                 user_roi_mask = np.zeros((pil_frame.height, pil_frame.width), dtype=np.uint8)
-
+        
         analysis_data = analyze_single_image(pil_frame, seg_model, cls_model, user_roi_mask)
 
         # Simpan frame ke file sementara agar bisa di-hash
@@ -590,43 +481,31 @@ if st.session_state.live.get("running"):
             "file_size_bytes": file_size,
             "analyzed_at": datetime.now(timezone(timedelta(hours=7))).isoformat(),
             "analysis_duration_sec": time.time() - current_time,
-            "analysis_duration_sec": time.time() - analysis_start_time,
             "original_path": relative_original,
             "mask_path": relative_mask,
             "overlay_path": relative_overlay,
         }
-
+        
         if is_saving_permanently:
             add_history_entry(db_entry)
         # --- SELESAI BLOK ANALISIS ---
-
+        
         st.session_state.live["session_results"].append(db_entry)
         st.session_state.live["last_result"] = db_entry
 
         # Tampilkan hasil di placeholder yang sama
         with result_placeholder.container():
             render_result(db_entry) # db_entry dari hasil analisis
-            render_result(db_entry)
 
     # 4. Pastikan untuk melepaskan koneksi RTSP setelah loop selesai
     if is_rtsp and cap:
-    # 4. Pastikan untuk melepaskan koneksi setelah loop selesai
-    if cap:
         cap.release()
-        print("Koneksi VideoCapture dilepaskan.")
-    
-    # Rerun sekali setelah loop berhenti untuk menampilkan ringkasan
-    if not st.session_state.live.get("running"):
-        st.rerun()
-
-# --- AKHIR DARI PERUBAHAN 2 ---
 
 # --- Langkah 4: Rangkuman Sesi Monitoring ---
 if st.session_state.live.get("session_results") and not st.session_state.live.get("running"):
     df_session_results = pd.DataFrame(st.session_state.live["session_results"])
-
+    
     render_summary_dashboard(df_session_results, title="Rangkuman Sesi Monitoring")
-
+    
     section_divider("Unduh Hasil Sesi Ini", "📥")
-    download_controller(st.session_state.live["session_results"], context="live")
     download_controller(st.session_state.live["session_results"], context="live")
