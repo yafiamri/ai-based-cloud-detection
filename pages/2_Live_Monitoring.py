@@ -217,8 +217,7 @@ if st.session_state.live.get("source_info"):
                         {player_html}
                     </div>
                 </div>
-                """,
-                height=aspect_ratio_padding + 20 # Berikan sedikit ruang tambahan
+                """
             )
     else:
         st.warning("Tidak dapat memuat pratinjau stream untuk ditampilkan.")
