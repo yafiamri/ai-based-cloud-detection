@@ -31,10 +31,12 @@ from utils.download import download_controller
 def get_frame_from_stream(cap: cv2.VideoCapture) -> Optional[np.ndarray]:
     """
     Membaca satu frame dari objek VideoCapture yang sudah diinisialisasi.
+    Ini adalah metode yang lebih andal dan efisien daripada mengunduh segmen.
     """
     if not cap or not cap.isOpened():
         return None
     try:
+        # Mengambil frame terbaru dari buffer untuk mengurangi latensi
         cap.grab()
         ret, frame = cap.retrieve()
         return frame if ret else None
@@ -132,15 +134,12 @@ if submitted:
 if st.session_state.live.get("source_info"):
     st.subheader("**🎬 Pratinjau Siaran Langsung**")
 
-    # Ambil tipe sumber (rtsp, web, youtube, dll.)
     source_info = st.session_state.live["source_info"]
-    stream_url = source_info.get("src")
     
     # --- LOGIKA PENGAMBILAN PRATINJAU ---
-    # Periksa dulu apakah pratinjau sudah ada. Jika belum, baru ambil.
-    if st.session_state.live.get("preview_frame") is None and stream_url:
+    if st.session_state.live.get("preview_frame") is None and source_info.get("src"):
         with st.spinner("Mengambil gambar pratinjau dari stream..."):
-            cap = cv2.VideoCapture(stream_url)
+            cap = cv2.VideoCapture(source_info["src"])
             if cap.isOpened():
                 ret, frame = cap.read()
                 cap.release()
@@ -148,35 +147,32 @@ if st.session_state.live.get("source_info"):
                     st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
     # --- TAMPILKAN PRATINJAU DARI SESSION STATE ---
-    # Blok ini sekarang hanya menampilkan apa yang sudah ada di state
     if st.session_state.live.get("preview_frame"):
-        preview_img = st.session_state.live["preview_frame"]
-        w, h = preview_img.size
-        aspect_ratio_padding = (h / w * 100) if w > 0 else 75.0
+        player_max_width = 800
+        player_height = int(player_max_width * (9 / 16))
         display_url = source_info["display_url"]
+        stream_url = source_info.get("src")
         
         player_html = ""
-        # 1. Logika untuk YouTube
+        
         if "youtube.com" in display_url or "youtu.be" in display_url:
             match = re.search(r"(?:v=|\/|live\/|embed\/|shorts\/)([0-9A-Za-z_-]{11})", display_url)
             if match:
                 video_id = match.group(1)
-                player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0&mute=1" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allow="autoplay; fullscreen"></iframe>'
+                player_html = f'<iframe src="https://www.youtube.com/embed/{video_id}?autoplay=0&mute=1" width="100%" height="{player_height}px" style="border:none;" allow="autoplay; fullscreen"></iframe>'
         
-        # 2. Logika untuk Twitch menggunakan embed resmi
         elif "twitch.tv" in display_url:
             match = re.search(r"twitch\.tv/([a-zA-Z0-9_]+)", display_url)
             if match:
                 channel_name = match.group(1)
-                # Dapatkan nama domain parent secara dinamis
                 hostname = urlparse(st.get_option("server.baseUrlPath")).hostname or "localhost"
                 player_html = f"""
-                    <div id="twitch-embed" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+                    <div id="twitch-embed"></div>
                     <script src="https://embed.twitch.tv/embed/v1.js"></script>
                     <script type="text/javascript">
                       new Twitch.Embed("twitch-embed", {{
                         width: "100%",
-                        height: "100%",
+                        height: {player_height},
                         channel: "{channel_name}",
                         layout: "video",
                         parent: ["{hostname}"]
@@ -184,21 +180,30 @@ if st.session_state.live.get("source_info"):
                     </script>
                 """
 
-        # Render pemutar yang terpilih
+        if not player_html and source_info.get("type") != "rtsp":
+            player_html = f"""
+                <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+                <video id="live-video" controls muted width="100%" height="{player_height}px" style="background-color:black;"></video>
+                <script>
+                  var video = document.getElementById('live-video');
+                  if(Hls.isSupported()) {{
+                    var hls = new Hls();
+                    hls.loadSource("{stream_url}");
+                    hls.attachMedia(video);
+                  }}
+                </script>
+            """
+        
         if player_html:
             components.html(
-                f"""
-                <div style="max-width: 800px; margin: auto;">
-                    <div style="position: relative; width: 100%; padding-bottom: {aspect_ratio_padding}%; height: 0; overflow: hidden;">
-                        {player_html}
-                    </div>
-                </div>
-                """
+                f'<div style="max-width:{player_max_width}px; margin: auto;">{player_html}</div>',
+                height=player_height + 40
             )
-        else: # Fallback untuk RTSP atau jika player gagal dibuat
+        else:
              _, col_img, _ = st.columns([1, 2, 1])
              with col_img:
-                st.image(preview_img, caption="Pratinjau Statis dari Stream", use_container_width=True)
+                st.image(st.session_state.live["preview_frame"], caption="Pratinjau Statis dari Stream", use_container_width=True)
+
     else:
         st.warning("Tidak dapat memuat pratinjau stream untuk ditampilkan.")
 
@@ -262,14 +267,10 @@ if "Manual" in st.session_state.live.get("roi_method", "Otomatis") and not is_co
 
             w, h = bg_image.size
             ratio = h / w if w > 0 else 1
-            # 1. Tetapkan lebar dasar yang 'aman'
             canvas_w = 512
-            # 2. Hitung tinggi berdasarkan rasio
             canvas_h = int(canvas_w * ratio)
-            # 3. Batasi tinggi maksimum untuk mencegah scrolling berlebih
             MAX_CANVAS_HEIGHT = 600
             canvas_h = min(canvas_h, MAX_CANVAS_HEIGHT)
-            # 4. Hitung ulang lebar jika tingginya dipotong
             if canvas_h == MAX_CANVAS_HEIGHT and ratio > 0:
                 canvas_w = int(canvas_h / ratio)
             
@@ -283,7 +284,6 @@ if "Manual" in st.session_state.live.get("roi_method", "Otomatis") and not is_co
                 drawing_mode=drawing_mode,
                 key="live_canvas"
             )
-            # Simpan hasil kanvas ke dalam session state
             st.session_state.live['canvas'] = canvas_result
 
             if canvas_result and canvas_result.json_data and canvas_result.json_data.get("objects"):
@@ -296,11 +296,8 @@ section_divider("Langkah 3: Jalankan Monitoring", "🚀")
 
 button_text = "⏹️ Hentikan Monitoring" if st.session_state.live.get("running") else "▶️ Mulai Monitoring"
 if st.button(button_text, type="primary", use_container_width=True, disabled=is_config_disabled):
-    # Cek status SEBELUM diubah
     is_running = st.session_state.live["running"]
-    # Ubah status running
     st.session_state.live["running"] = not is_running
-    # Atur flag toast berdasarkan aksi yang baru saja dilakukan
     if not is_running:
         st.session_state.live["session_results"] = []
         st.session_state.live["last_result"] = None
@@ -311,65 +308,59 @@ if st.button(button_text, type="primary", use_container_width=True, disabled=is_
 # --- BLOK TAMPILAN DAN PEMROSESAN UTAMA ---
 info_placeholder = st.empty()
 result_placeholder = st.empty()
-            
-# Tampilkan hasil terakhir jika monitoring tidak berjalan (misalnya setelah dihentikan)
+        
 if not st.session_state.live.get("running") and st.session_state.live.get("last_result"):
     with result_placeholder.container():
         render_result(st.session_state.live.get("last_result"))
 
-# Blok utama yang hanya berjalan saat monitoring aktif
 if st.session_state.live.get("running"):
-    info_placeholder.info(f"Monitoring... Menganalisis setiap {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
+    info_placeholder.info(f"Monitoring sedang berlangsung. Menganalisis setiap {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
     st.toast("Monitoring dimulai!", icon="👀")
-    
-    stream_url = st.session_state.live["source_info"].get("src")
+
+    source_info = st.session_state.live["source_info"]
+    stream_url = source_info.get("src")
+
     if not stream_url:
         st.error("URL stream tidak valid. Monitoring dihentikan.")
         st.session_state.live["running"] = False
         st.rerun()
 
-    # Buka koneksi HANYA SEKALI sebelum loop
     cap = cv2.VideoCapture(stream_url)
     if not cap.isOpened():
         st.error(f"Gagal membuka stream dari URL. Monitoring dihentikan.")
         st.session_state.live["running"] = False
         st.rerun()
 
-    # Inisialisasi variabel loop
     pipeline_hash = get_pipeline_version_hash()
     last_analysis_time = 0
     consecutive_failures = 0
     MAX_FAILURES = 5
 
     while st.session_state.live.get("running"):
-        # Cek interval waktu
-        if time.time() - last_analysis_time < st.session_state.live.get("interval", 10):
+        current_time_for_loop = time.time()
+        if current_time_for_loop - last_analysis_time < st.session_state.live.get("interval", 10):
             time.sleep(1)
             continue
         
         analysis_start_time = time.time()
         last_analysis_time = analysis_start_time
-
-        # Ambil frame dengan fungsi baru yang efisien
+        
         frame = get_frame_from_stream(cap)
         
         if frame is None:
             consecutive_failures += 1
-            info_placeholder.warning(f"Gagal mengambil frame (percobaan {consecutive_failures}/{MAX_FAILURES})...")
+            info_placeholder.warning(f"Gagal mengambil frame (percobaan {consecutive_failures}/{MAX_FAILURES}). Stream mungkin terganggu.")
             if consecutive_failures >= MAX_FAILURES:
                 st.error("Gagal mengambil frame beberapa kali. Stream mungkin berakhir. Monitoring dihentikan.")
                 st.session_state.live["running"] = False
-            continue 
-        
-        # Jika berhasil, reset counter dan lanjutkan analisis
+            continue
+
         consecutive_failures = 0
-        info_placeholder.info(f"Monitoring... Menganalisis setiap {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
+        info_placeholder.info(f"Monitoring sedang berlangsung. Menganalisis setiap {st.session_state.live.get('interval', 10)} detik...", icon="🛰️")
         
         # --- MULAI BLOK ANALISIS ---
-        # Lakukan analisis pada frame terakhir yang dibaca
         pil_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         
-        # Kumpulkan konfigurasi yang sedang aktif untuk analisis ini
         live_config = {
             "roi_method": st.session_state.live.get("roi_method", "Otomatis"),
             "canvas": st.session_state.live.get("canvas"),
@@ -379,7 +370,6 @@ if st.session_state.live.get("running"):
         user_roi_mask = None
         if "Manual" in live_config["roi_method"]:
             canvas_data = live_config["canvas"]
-            # Cek apakah pengguna sudah menggambar sesuatu
             if canvas_data and canvas_data.json_data and canvas_data.json_data.get("objects"):
                 user_roi_mask = canvas_to_mask(canvas_data, pil_frame.height, pil_frame.width)
             else:
@@ -387,18 +377,13 @@ if st.session_state.live.get("running"):
         
         analysis_data = analyze_single_image(pil_frame, seg_model, cls_model, user_roi_mask)
 
-        # Simpan frame ke file sementara agar bisa di-hash
         with tempfile.NamedTemporaryFile(delete=True, suffix=".png") as tmp:
             pil_frame.save(tmp, format="PNG")
             tmp.seek(0)
-            # Hitung kedua hash
-            # 1. Dapatkan hash file terlebih dahulu
             file_hash = get_file_hash(tmp)
-            # 2. Gunakan file_hash untuk mendapatkan analysis_hash
             analysis_hash = get_analysis_hash(file_hash, pipeline_hash, live_config)
             file_size = tmp.tell()
 
-        # 4. Buat entri data yang lengkap
         is_saving_permanently = st.session_state.live["save_to_history"]
         sufix = "live_monitoring" if is_saving_permanently else "unsaved_live"
         timestamp_name = f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}UTC_{sufix}"
@@ -409,7 +394,6 @@ if st.session_state.live.get("running"):
             temp_session_dir = os.path.join(config['paths']['temp_dir'], "live_session_artefacts")
             base_original_dir, base_mask_dir, base_overlay_dir = (os.path.join(temp_session_dir, "original"), os.path.join(temp_session_dir, "masks"), os.path.join(temp_session_dir, "overlays"))
 
-        # Buat path final
         original_path = os.path.join(base_original_dir, timestamp_name, f"{timestamp_name}_original.png")
         mask_path = os.path.join(base_mask_dir, timestamp_name, f"{timestamp_name}_mask.png")
         overlay_path = os.path.join(base_overlay_dir, timestamp_name, f"{timestamp_name}_overlay.png")
@@ -421,8 +405,6 @@ if st.session_state.live.get("running"):
         overlay_img = create_enhanced_overlay(pil_frame, analysis_data['segmentation_mask'], analysis_data['roi_mask'])
         overlay_img.save(overlay_path)
 
-        # Ubah path absolut menjadi path relatif.
-        # Ganti semua `\` dengan `/`.
         relative_original = os.path.relpath(original_path).replace("\\", "/")
         relative_mask = os.path.relpath(mask_path).replace("\\", "/")
         relative_overlay = os.path.relpath(overlay_path).replace("\\", "/")
@@ -444,20 +426,16 @@ if st.session_state.live.get("running"):
         
         if is_saving_permanently:
             add_history_entry(db_entry)
-        # --- SELESAI BLOK ANALISIS ---
         
         st.session_state.live["session_results"].append(db_entry)
         st.session_state.live["last_result"] = db_entry
 
-        # Tampilkan hasil di placeholder yang sama
         with result_placeholder.container():
-            render_result(db_entry) # db_entry dari hasil analisis
+            render_result(db_entry)
 
-    # Lepaskan koneksi SETELAH loop selesai
     if cap:
         cap.release()
     
-    # Rerun untuk menampilkan ringkasan sesi jika monitoring dihentikan
     if not st.session_state.live.get("running"):
         st.rerun()
 
