@@ -98,14 +98,14 @@ st.write("Analisis tutupan dan jenis awan secara otomatis dari siaran langsung (
 
 # --- Langkah 1: Input URL & Pratinjau ---
 section_divider("Langkah 1: Masukkan URL & Lihat Pratinjau", "📡")
-st.markdown("Tempelkan tautan **siaran langsung** dari platform seperti YouTube untuk memulai pemantauan.")
+st.markdown("Tempelkan tautan **siaran langsung** dari untuk memulai pemantauan.")
 
 seed = st.session_state.widget_seed
 
 with st.form(key=f"url_form_live_{seed}"):
     url_input = st.text_input("Tempel URL siaran langsung di sini",
-                              placeholder="https://www.youtube.com/live/VIDEO_ID", 
-                              help="Masukkan URL siaran langsung dari YouTube atau platform video lainnya.",
+                              placeholder="https://https://www.twitch.tv/yafiamri", 
+                              help="Masukkan URL siaran langsung (hanya dari Twitch yang didukung oleh sistem saat ini)",
                               key=f"live_url_input_{seed}"
                               )
     submitted = st.form_submit_button("🔗 Periksa URL", use_container_width=True)
