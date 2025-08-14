@@ -27,51 +27,29 @@ from utils.system import cleanup_temp_files
 from utils.download import download_controller
 
 # Fungsi helper untuk memastikan aplikasi berjalan stabil di lingkungan cloud.
-def get_frame_via_download(stream_url: str) -> Optional[np.ndarray]:
+def get_frame_from_live_url(stream_src_url: str) -> Optional[np.ndarray]:
     """
-    Mengunduh segmen pendek dari stream menggunakan yt-dlp, memprosesnya
-    untuk memastikan file valid, lalu membaca frame dari file lokal tersebut.
-    Ini adalah metode paling andal untuk lingkungan cloud.
+    Mengambil satu frame langsung dari URL stream mentah (misalnya, .m3u8 dari HLS)
+    menggunakan OpenCV. Ini adalah metode yang efisien untuk live stream.
     """
-    temp_clip_path = None
+    cap = None
     try:
-        # 1. Buat file temporer dengan aman
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_clip:
-            temp_clip_path = tmp_clip.name
-
-        # 2. Konfigurasi yt-dlp yang paling andal
-        ydl_opts = {
-            'outtmpl': temp_clip_path,
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'quiet': True,
-            'download_ranges': yt_dlp.utils.download_range_func(None, [(0, 5)]),
-            'postprocessors': [{'key': 'FFmpegVideoRemuxer', 'preferedformat': 'mp4'}],
-            'overwrites': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
-        }
-        
-        # 3. Unduh segmen video
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([stream_url])
-        
-        # 4. Buka file LOKAL yang sudah valid dengan OpenCV
-        cap = cv2.VideoCapture(temp_clip_path)
+        # Langsung buka stream URL dengan OpenCV
+        cap = cv2.VideoCapture(stream_src_url)
         if not cap.isOpened():
-            print(f"Gagal membuka file video temporer: {temp_clip_path}")
+            print(f"Gagal membuka stream URL dengan OpenCV: {stream_src_url}")
             return None
-        
+
+        # Baca satu frame
         ret, frame = cap.read()
-        cap.release()
-        
         return frame if ret else None
-    
     except Exception as e:
-        print(f"Error dalam fungsi get_frame_via_download: {e}")
+        print(f"Error dalam fungsi get_frame_from_live_url: {e}")
         return None
     finally:
-        # 5. Bagian krusial: Pastikan file temporer selalu dihapus
-        if temp_clip_path and os.path.exists(temp_clip_path):
-            os.remove(temp_clip_path)
+        # Pastikan untuk melepaskan resource
+        if cap:
+            cap.release()
 
 # --- 1. Konfigurasi Halaman & Inisialisasi State ---
 st.set_page_config(page_title=f"Live Monitoring - {config['app']['title']}", layout="wide")
@@ -169,20 +147,17 @@ if st.session_state.live.get("source_info"):
     
     # --- LOGIKA PENGAMBILAN PRATINJAU ---
     # Periksa dulu apakah pratinjau sudah ada. Jika belum, baru ambil.
-    if st.session_state.live.get("preview_frame") is None:
-        with st.spinner("Mengambil gambar pratinjau dari stream..."):
-            frame = None
-            if source_type == "rtsp":
-                # Untuk RTSP, ambil frame langsung dengan OpenCV
-                cap = cv2.VideoCapture(source_info["src"])
-                ret, frame = cap.read()
-                cap.release()
-            else:
-                # Untuk web, gunakan metode download yang andal
-                frame = get_frame_via_download(st.session_state.live["url_input"])
-            
-            if frame is not None:
-                st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+# Periksa dulu apakah pratinjau sudah ada. Jika belum, baru ambil.
+if st.session_state.live.get("preview_frame") is None:
+    with st.spinner("Mengambil gambar pratinjau dari stream..."):
+        # Ambil URL stream mentah dari source_info
+        stream_src_url = st.session_state.live["source_info"]["src"]
+        
+        # Gunakan fungsi baru untuk mengambil frame
+        frame = get_frame_from_live_url(stream_src_url)
+
+        if frame is not None:
+            st.session_state.live["preview_frame"] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
     # --- TAMPILKAN PRATINJAU DARI SESSION STATE ---
     # Blok ini sekarang hanya menampilkan apa yang sudah ada di state
@@ -387,13 +362,17 @@ if st.session_state.live.get("running"):
         
         # 3. Ambil frame menggunakan metode yang sesuai
         frame = None
+        stream_src_url = st.session_state.live["source_info"]["src"]
+
         if is_rtsp:
+            # Logika untuk RTSP tetap sama, namun lebih baik dikelola di dalam fungsi
             if cap and cap.isOpened():
                 ret, frame = cap.read()
-            else: # Jika koneksi cap hilang
+            else:
                 ret = False
-        else: # Untuk URL web
-            frame = get_frame_via_download(url)
+        else: # Untuk URL web (Twitch, dll)
+            # Gunakan fungsi baru yang efisien
+            frame = get_frame_from_live_url(stream_src_url)
             ret = frame is not None
         
         if not ret or frame is None:
